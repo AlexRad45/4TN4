@@ -1,4 +1,4 @@
-# 4TN4
+# 4TN4 Project 1
 The goal of this project is to design a simple
 lossy image compression method. The basic idea
 this compression method is split into 2 main parts.
@@ -8,4 +8,6 @@ preserving as much necessary data as possible. The
 second part consists of a decoder, which uses the
 encoder data bit stream to reconstruct the image to
 an acceptable quality
+
+###
 
