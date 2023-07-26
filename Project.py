@@ -1,10 +1,10 @@
+#4TN4 Project-1 Image Compressor 
+#Alex Radikov
 import numpy as np
 import cv2
-import math
-from PIL import Image
-from matplotlib import pyplot as plt
-from matplotlib import image as mpimg
 
+
+#initial colourspace conversion functions, later replaced with the ones below
 def BGR_to_YUV1(bgr):
     # Convert BGR to YUV
     b, g, r = cv2.split(bgr)
@@ -21,19 +21,20 @@ def YUV_to_BGR1(yuv):
     g = y - 0.395 * u - 0.581 * v
     b = y + 2.032 * u
     bgr_image = cv2.merge([b, g, r])
+    bgr_image = np.clip(bgr_image, 0, 255)
     return np.uint8(bgr_image)
 
 
 def BGR_to_YUV(bgr):
-    # Conversion matrix for BGR to YUV color space
+    # conversion matrix for BGR to YUV color space
     conv_mat = np.array([[0.114, 0.587, 0.299],
                          [0.436, -0.289, -0.147],
                          [-0.100, -0.515, 0.615]])
 
     # Convert the image to YUV color space
     h, w, c = bgr.shape
-    bgr = bgr.astype("float32")
-    img_yuv = np.zeros((h, w, c), dtype=np.float32)
+    #bgr = bgr.astype("float32")
+    img_yuv = np.zeros((h, w, c), dtype=np.float64)
 
     for i in range(h):
         for j in range(w):
@@ -52,7 +53,7 @@ def YUV_to_BGR(yuv):
 
     # Convert the image back to BGR color space
     h, w, c = yuv.shape
-    img_bgr = np.zeros((h, w, c), dtype=np.float32)
+    img_bgr = np.zeros((h, w, c), dtype=np.float64)
 
     for i in range(h):
         for j in range(w):
@@ -63,31 +64,34 @@ def YUV_to_BGR(yuv):
 
     return np.uint8(img_bgr)
 
-
+#downsampling function using window
 def downsample(img):
     r,c,d = img.shape
-    y_img = np.zeros((r//2,c//2),dtype=np.uint8)
-    u_img = np.zeros((r//4,c//4),dtype=np.uint8)
-    v_img = np.zeros((r//4,c//4),dtype=np.uint8)
+    y_img = np.zeros((r//2,c//2),dtype=np.float64)
+    u_img = np.zeros((r//4,c//4),dtype=np.float64)
+    v_img = np.zeros((r//4,c//4),dtype=np.float64)
     
     y, u, v = cv2.split(img)
     
     for i in range(0,r//2):
         for j in range(0,c//2):
             y_img[i,j] = y[i*2,j*2]
-    
+            
     for k in range(0,r//4):
         for l in range(0,c//4):
             u_img[k,l] = u[k*4,l*4]
             v_img[k,l] = v[k*4,l*4]
     
-    return y_img, u_img, v_img
-    
+    #return quantize(y_img), quantize(u_img), quantize(v_img)
+    return y_img,u_img,v_img
+
+#upsampling function using bilinear interpolation
 def upsample(y,u,v):
     row,col = y.shape
-    y_img = np.zeros((row*2,col*2),dtype=np.uint8)
-    u_img = np.zeros((row*2,col*2),dtype=np.uint8)
-    v_img = np.zeros((row*2,col*2),dtype=np.uint8)
+    uv_row, uv_col = u.shape
+    y_img = np.zeros((row*2,col*2),dtype=np.float64)
+    u_img = np.zeros((row*2,col*2),dtype=np.float64)
+    v_img = np.zeros((row*2,col*2),dtype=np.float64)
     
     for i in range(int(row*2)):
         for j in range(int(col*2)):
@@ -102,58 +106,59 @@ def upsample(y,u,v):
             c = (i/4)-i_old_uv
             d = (j/4)-j_old_uv
             
-            if((i_old_y < 199) and (j_old_y < 299)):
+            #bilinear interpolation within the ranges of the old matrixs i and j
+            if((i_old_y < row-1) and (j_old_y < col-1)):
                 y_img[i,j] = (1-a)*(1-b)*y[i_old_y,j_old_y] + a*(1-b)*y[i_old_y+1,j_old_y] + (1-a)*b*y[i_old_y,j_old_y+1] + a*b*y[i_old_y+1,j_old_y+1]
-            if((i_old_y == 199) and (j_old_y == 299)):
-                y_img[i,j] = y[199,299]
+           
+            if((i_old_y == row-1) and (j_old_y == col-1)):
+                y_img[i,j] = y[row-1,col-1]
                 
-            if((i_old_uv < 99) and (j_old_uv < 149)):
+            if((i_old_uv < uv_row-1) and (j_old_uv < uv_col-1)):
                 u_img[i,j] = (1-c)*(1-d)*u[i_old_uv,j_old_uv] + c*(1-d)*u[i_old_uv+1,j_old_uv] + (1-c)*d*u[i_old_uv,j_old_uv+1] + c*d*u[i_old_uv+1,j_old_uv+1]
                 v_img[i,j] = (1-c)*(1-d)*v[i_old_uv,j_old_uv] + c*(1-d)*v[i_old_uv+1,j_old_uv] + (1-c)*d*v[i_old_uv,j_old_uv+1] + c*d*v[i_old_uv+1,j_old_uv+1]
-            if((i_old_uv == 99) and (j_old_uv == 149)):
-                u_img[i,j] = u[99,149]
-                v_img[i,j] = v[99,149]
+            
+            if((i_old_uv == uv_row-1) and (j_old_uv == uv_col-1)):
+                u_img[i,j] = u[uv_row-1,uv_col-1]
+                v_img[i,j] = v[uv_row-1,uv_col-1]
     
     yuv_image = cv2.merge([y_img, u_img, v_img])
     return yuv_image
 
+
 def psnr(img1, img2):
 
     #Calculates the PSNR between two images
-
     mse = np.mean((img1 - img2)**2)
-    return 10 * np.log10(255 / mse)
+    return 10 * np.log10(255**2 / mse)
+
+def quantize(num):
+    #function to quantize a 1xn array of nums to 0-255
+    if(np.min(num)<0):
+        num+=abs(np.min(num))
+        num=num/np.max(num)
+        num=num*255
+    else:
+        num=num/np.max(num)
+        num=num*255
+    return np.round(num)
     
 
-
-img=cv2.imread('naturephoto.jpg')
+img=cv2.imread('testimage.png')
 img1=BGR_to_YUV1(img)
 img2=YUV_to_BGR1(img1)
 
-img11=BGR_to_YUV(img)
-img22=YUV_to_BGR(img1)
-
-
+#proper_image=cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+#yuv=cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
 
 y,u,v = downsample(img1)
 new_img = upsample(y,u,v)
-done = YUV_to_BGR(new_img)
+done = YUV_to_BGR1(new_img)
 
-print(img1)
-print("break")
-print(img11)
-
-imgref= cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-print("break")
-print(imgref)
-'''
-print("break")
-print(new_img)
-print("break")
+print("PSNR of Image")
 print(psnr(done,img))
-'''
-cv2.imshow('original',img)
-cv2.imshow('original converted',imgref)
-cv2.imshow('modified',img1)
+
+cv2.imshow('Original photo',img)
+cv2.imshow('Original photo converted',img2)
+cv2.imshow('Reconstructed image',done)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
